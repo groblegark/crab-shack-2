@@ -21,6 +21,7 @@ const STX = { crate: [630], board: [664, 685, 706], grill: [734, 756, 778], pass
 const STATION_BOTTOM = 152;
 const QUEUE_X0 = 834, QUEUE_DX = 13, QUEUE_MAX = 4;
 const PARK_X = 500, RACK_X = 596;
+const SHELTER_X = 444, MOVE_IN_COST = 25;
 
 // ---------------------------------------------------------------- clock
 const TS = 4;                     // game minutes per real second
@@ -76,9 +77,9 @@ let crabs = [], customers = [], floaters = [];
 let spawnT = 3, toast = null, soundOn = true;
 let camX = 300, followIdx = -1, tab = "crew";
 let lastRentDay = 0, gameOver = false;
-function rentWeek() { return ((day - 1) / 7 | 0) + 1; }
-function rentAmount() { return Math.round(250 * Math.pow(1.25, rentWeek() - 1) / 10) * 10; }
-function rentDaysLeft() { return (7 - (day % 7)) % 7; }
+const CRAB_WAGE = 15, HOUSE_RENT = 8;
+function rentAmount() { return Math.round(40 * Math.pow(1.04, day - 1)); }
+function nightlyDue() { return rentAmount() + CRAB_WAGE * crabs.length; }
 const busy = { board: [false, false, false], grill: [false, false, false] };
 const bus = { x: 360, dir: 1, state: "drive", dwellT: 0, riders: [] };
 let earnHist = [];
@@ -97,12 +98,17 @@ function scale2(art) {
   return { cv: c, fv: c, w: art.w * 2, h: art.h * 2 };
 }
 const HOUSES2 = HOUSES.map(scale2);
+const SHELTER2 = scale2(SHELTER);
 const BUS2 = scale2(BUS);
 const BUGGIES2 = BUGGIES.map(scale2);
 
-function homeX(c) { return HOUSE_XS[c.p.house] + 28; }
+function homeX(c) {
+  if (c.p.homeless) return SHELTER_X + 16 + (Math.max(0, crabs.indexOf(c)) % 3) * 12;
+  return HOUSE_XS[c.p.house] + 28;
+}
 
 function newCrab(persona) {
+  if (persona.wallet == null) persona.wallet = 10;
   return {
     p: persona,
     x: homeX({ p: persona }), flip: false, hidden: false, animT: Math.random() * 9,
@@ -218,7 +224,9 @@ function maybeQuip(c, dt) {
   c.quipT -= dt;
   if (c.quipT <= 0 && !c.hidden) {
     const isNight = darkness() > 0.7 && c.dayState === "home";
-    const lines = isNight ? ["ZZZ..."] : TRAITS[c.p.trait].quips[quipContext(c)];
+    let lines = isNight ? ["ZZZ..."] : TRAITS[c.p.trait].quips[quipContext(c)];
+    if (c.p.homeless && quipContext(c) === "home" && !isNight)
+      lines = ["SAVING FOR A PLACE", "SHELTER SOUP AGAIN", "I'LL BOUNCE BACK"];
     c.quip = { text: lines[(Math.random() * lines.length) | 0], t: 2.6 };
     c.quipT = 14 + Math.random() * 18;
   }
@@ -449,7 +457,10 @@ function updateCustomers(dt) {
 
 // ---------------------------------------------------------------- status text
 function crabStatus(c) {
-  if (c.dayState === "home") return darkness() > 0.7 ? "SLEEPING" : "CHILLING AT HOME";
+  if (c.dayState === "home") {
+    if (darkness() > 0.7) return c.p.homeless ? "SLEEPING AT THE SHELTER" : "SLEEPING";
+    return c.p.homeless ? "AT THE SHELTER" : "CHILLING AT HOME";
+  }
   if (c.dayState === "working") {
     if (c.kstate === "work" && c.slotKind === "board") return "CHOPPING";
     if (c.kstate === "work" && c.slotKind === "grill") return "GRILLING";
@@ -479,7 +490,12 @@ function tryBuy(key) {
   if (u.lvl >= u.max || coins < upCost(u)) return;
   coins -= upCost(u); u.lvl++;
   if (key === "chef") {
-    const c = newCrab(makeCrabPersona(crabs.length));
+    const p2 = makeCrabPersona(crabs.length + ((Math.random() * 6) | 0));
+    const used = new Set(crabs.filter(k => !k.p.homeless).map(k => k.p.house));
+    p2.homeless = true;
+    for (let h = 0; h < HOUSE_XS.length; h++) if (!used.has(h)) { p2.house = h; p2.homeless = false; break; }
+    const c = newCrab(p2);
+    c.x = homeX(c);
     crabs.push(c);
     popText(c.p.name + " JOINS THE CREW!", c.x - 20, FLOOR_Y - 30, [140, 255, 160]);
   }
@@ -600,13 +616,17 @@ function drawTown() {
   wrect(0, ROAD_Y0, ROAD_END, 2, [90, 86, 100]);
   wrect(0, ROAD_Y1 - 2, ROAD_END, 2, [90, 86, 100]);
   for (let x = 6; x < ROAD_END; x += 22) wrect(x, ROAD_Y0 + 10, 10, 2, [230, 220, 120]);
-  // houses
-  for (let i = 0; i < crabs.length && i < HOUSE_XS.length; i++)
-    wblit(HOUSES2[crabs[i].p.color], HOUSE_XS[i], ROAD_Y0 - HOUSES2[0].h);
+  // houses (owned ones get the owner's roof color; empty lots stay bare sand)
+  for (const c of crabs)
+    if (!c.p.homeless) wblit(HOUSES2[c.p.color % HOUSES2.length], HOUSE_XS[c.p.house], ROAD_Y0 - HOUSES2[0].h);
+  // the crab shelter
+  wblit(SHELTER2, SHELTER_X, ROAD_Y0 - SHELTER2.h);
+  if (SHELTER_X - camX > -80 && SHELTER_X - camX < W)
+    text(ctx, "SHELTER", SHELTER_X + 14 - camX, ROAD_Y0 - SHELTER2.h - 7, [230, 220, 200], 4);
   // bus stops
   for (const s of BUS_STOPS) wblit(BUS_STOP, s - 3, ROAD_Y1 + 2);
   // scenery
-  wblit(PALM, 415, 96); wblit(PALM, 470, 92, true); wblit(PALM, 930, 96); wblit(PALM, 985, 100, true);
+  wblit(PALM, 415, 96); wblit(PALM, 545, 92, true); wblit(PALM, 930, 96); wblit(PALM, 985, 100, true);
   wblit(UMBRELLA, 890, SHORE_Y - 4); wblit(UMBRELLA, 470, SHORE_Y - 2);
   // parked vehicles
   for (const c of crabs) {
@@ -744,6 +764,8 @@ function drawFollowCard() {
   text(ctx, TRAITS[p.trait].label + " " + MODES[p.mode].label, 29, 13, [120, 90, 60], 5);
   text(ctx, crabStatus(c), 29, 21, [30, 110, 60], 5);
   text(ctx, "SHIFT " + SHIFTS[p.shift].label, 29, 28, [110, 110, 130], 4);
+  const wTxt = "$" + fmt(Math.max(0, p.wallet));
+  text(ctx, wTxt, 126 - textWidth(wTxt, 4), 28, p.homeless ? [190, 80, 80] : [140, 110, 40], 4);
 }
 
 function drawPanel() {
@@ -762,10 +784,9 @@ function drawPanel() {
   }
   const rate = incomeRate();
   text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [170, 150, 135], 5);
-  const rDays = rentDaysLeft(), rAmt = rentAmount();
-  const urgent = rDays === 0 || (rDays <= 1 && coins < rAmt);
-  const rTxt = "RENT $" + fmt(rAmt) + (rDays === 0 ? " TONIGHT" : " IN " + rDays + "D");
-  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, urgent ? [255, 120, 120] : [170, 150, 135], 4);
+  const due = nightlyDue();
+  const rTxt = "DUE 20:00 $" + fmt(due);
+  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, coins < due ? [255, 120, 120] : [170, 150, 135], 4);
 
   if (tab === "shop") {
     for (const b of BUTTONS) {
@@ -812,7 +833,7 @@ function drawGameOver() {
   textShadow(ctx, "EVICTED!", cx2 - textWidth("EVICTED!") / 2, 76, [230, 60, 70], [120, 30, 40]);
   text(ctx, "THE LANDLORD CRAB TOOK", cx2 - 66, 92, [90, 60, 50], 6);
   text(ctx, "BACK THE SHACK", cx2 - 41, 101, [90, 60, 50], 6);
-  text(ctx, "RENT OWED $" + fmt(rentAmount()), cx2 - 45, 114, [140, 60, 60], 6);
+  text(ctx, "NIGHTLY RENT OWED $" + fmt(rentAmount()), cx2 - 66, 114, [140, 60, 60], 6);
   text(ctx, "SURVIVED " + day + " DAYS  EARNED $" + fmt(lifetime), cx2 - 78, 124, [90, 90, 110], 5);
   const bl = ((time * 2) | 0) % 2;
   if (bl) text(ctx, "CLICK TO START OVER", cx2 - 56, 137, [40, 110, 60], 6);
@@ -833,13 +854,47 @@ function frame(now) {
   last = now; time += dt;
   if (!gameOver) tmin += dt * TS;
   if (tmin >= 1440) { tmin -= 1440; day++; }
-  if (day % 7 === 0 && tmin >= 20 * 60 && lastRentDay !== day) {
+  if (tmin >= 20 * 60 && lastRentDay !== day) {
     lastRentDay = day;
+    // 1. wages: pay every crab you can afford
+    let wages = 0;
+    for (const c of crabs) {
+      if (coins >= CRAB_WAGE) { coins -= CRAB_WAGE; c.p.wallet += CRAB_WAGE; wages += CRAB_WAGE; }
+      else popText("NO PAY?!", c.x, FLOOR_Y - 30, [255, 120, 120]);
+    }
+    if (wages > 0) earnHist.push({ t: time, amt: -wages });
+    // 2. house rent from each crab's own wallet; broke crabs move to the shelter
+    let evictedNames = [];
+    for (const c of crabs) {
+      if (c.p.homeless) {
+        // shelter is free; move back into a free house once savings allow
+        const used = new Set(crabs.filter(k => !k.p.homeless).map(k => k.p.house));
+        let free = -1;
+        for (let h = 0; h < HOUSE_XS.length; h++) if (!used.has(h)) { free = h; break; }
+        if (free >= 0 && c.p.wallet >= MOVE_IN_COST + HOUSE_RENT) {
+          c.p.wallet -= MOVE_IN_COST; c.p.house = free; c.p.homeless = false;
+          toast = { text: c.p.name + " MOVED INTO A HOUSE!", t: 5 };
+          popText("HOME SWEET HOME", HOUSE_XS[free] + 8, 100, [140, 255, 160]);
+          sfx.ding();
+        }
+      } else if (c.p.wallet >= HOUSE_RENT) {
+        c.p.wallet -= HOUSE_RENT;
+      } else {
+        c.p.homeless = true;
+        evictedNames.push(c.p.name);
+        popText(c.p.name + " LOST THEIR HOUSE", c.x - 12, FLOOR_Y - 34, [255, 120, 120]);
+      }
+    }
+    if (evictedNames.length) {
+      toast = { text: evictedNames.join(", ") + " MOVED TO THE SHELTER", t: 6 };
+      sfx.angry();
+    }
+    // 3. shack rent: miss it and it's over
     const rent = rentAmount();
     if (coins >= rent) {
       coins -= rent;
       earnHist.push({ t: time, amt: -rent });
-      toast = { text: "PAID RENT $" + fmt(rent) + " - SEE YOU NEXT WEEK", t: 6 };
+      if (!evictedNames.length && !toast) toast = { text: "PAID $" + fmt(wages) + " WAGES + $" + fmt(rent) + " RENT", t: 5 };
       popText("-$" + rent + " RENT", SHACK_DOOR, 110, [255, 120, 120]);
       sfx.buy(); save();
     } else {

@@ -76,6 +76,7 @@ function makeCrabPersona(i, rng) {
     acc: ACC_KEYS[(rng() * ACC_KEYS.length) | 0],
     color: i % CRAB_COLORS.length,
     shift: i % 2 === 0 ? "M" : "E",   // alternate morning/evening
+    wallet: 10,
     house: i,
   };
 }
