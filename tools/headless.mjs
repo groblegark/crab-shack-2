@@ -79,7 +79,7 @@ for (const kv of SET) {
 }
 
 // ---- run ----------------------------------------------------------------
-G("soundOn = false; musicOn = false;");
+G('soundOn = false; musicOn = false; screen = "play";');
 const stepScript = new vm.Script(`simNow += ${STEP * 1000}; rafCb(simNow);`);
 const buyScript = BUY.length ? new vm.Script(`
   if (Math.abs(tmin - 12 * 60) < ${STEP} * TS) {

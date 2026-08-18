@@ -80,7 +80,7 @@ let lastRentDay = 0, gameOver = false, newConfirmT = 0;
 let screen = "title", hasSave = false, wiping = false;
 function newGame() { wiping = true; localStorage.removeItem(SAVE_KEY); location.reload(); }
 const CRAB_WAGE = 18, HOUSE_RENT = 8;
-function rentAmount() { return day <= 1 ? 0 : 100 + 3 * (day - 2); }
+function rentAmount() { return day <= 1 ? 0 : 115; }
 function nightlyDue() { return rentAmount() + CRAB_WAGE * crabs.length; }
 const busy = { board: [false, false, false], grill: [false, false, false] };
 const bus = { x: 360, dir: 1, state: "drive", dwellT: 0, riders: [] };
@@ -939,9 +939,9 @@ let last = performance.now(), saveT = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000) * TURBO;
   last = now; time += dt;
-  if (!gameOver) tmin += dt * TS;
+  if (!gameOver && screen === "play") tmin += dt * TS;
   if (tmin >= 1440) { tmin -= 1440; day++; }
-  if (tmin >= 20 * 60 && lastRentDay !== day) {
+  if (screen === "play" && tmin >= 20 * 60 && lastRentDay !== day) {
     lastRentDay = day;
     (window.dayLog = window.dayLog || []).push({ day, close: Math.round(coins) });
     // 1. wages: pay every crab you can afford
@@ -1047,6 +1047,7 @@ hasSave = load();
 if (!hasSave) {
   crabs = [newCrab(makeCrabPersona(0)), newCrab(makeCrabPersona(1))];
   coins = 140;   // opening cash: ingredients + first rent buffer
+  toast = { text: "LANDLORD: RENT IS $115 A NIGHT. FIRST NIGHT FREE!", t: 9 };
 }
 requestAnimationFrame(frame);
 
