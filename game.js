@@ -39,6 +39,7 @@ function darkness() { // 0 = day, 1 = full night
 }
 
 // ---------------------------------------------------------------- recipes
+const INGREDIENT_COST = { fish_raw: 4, fruit: 2 };
 const ITEM_NAMES = {
   fish_raw: "FISH", fish_cut: "CUT FISH", fruit: "FRUIT",
   taco: "FISH TACO", juice: "JUICE", plate_fish: "GRILL FISH",
@@ -74,6 +75,10 @@ let coins = 0, lifetime = 0, time = 0;
 let crabs = [], customers = [], floaters = [];
 let spawnT = 3, toast = null, soundOn = true;
 let camX = 300, followIdx = -1, tab = "crew";
+let lastRentDay = 0, gameOver = false;
+function rentWeek() { return ((day - 1) / 7 | 0) + 1; }
+function rentAmount() { return Math.round(250 * Math.pow(1.25, rentWeek() - 1) / 10) * 10; }
+function rentDaysLeft() { return (7 - (day % 7)) % 7; }
 const busy = { board: [false, false, false], grill: [false, false, false] };
 const bus = { x: 360, dir: 1, state: "drive", dwellT: 0, riders: [] };
 let earnHist = [];
@@ -162,6 +167,11 @@ function earn(amt, x, y) {
   popText("+$" + Math.floor(amt), x, y, [255, 230, 120]);
   sfx.coin();
 }
+function expense(amt, x, y, label) {
+  coins -= amt;
+  earnHist.push({ t: time, amt: -amt });   // income rate is net
+  popText("-$" + amt + (label ? " " + label : ""), x, y, [255, 120, 120]);
+}
 function incomeRate() {
   while (earnHist.length && earnHist[0].t < time - 60) earnHist.shift();
   if (!earnHist.length) return 0;
@@ -175,7 +185,7 @@ function save() {
   if (FRESH) return;
   const lv = {}; for (const k in UPS) lv[k] = UPS[k].lvl;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
-    coins, lifetime, lv, day, tmin, rate: incomeRate(), t: Date.now(),
+    coins, lifetime, lv, day, tmin, lastRentDay, rate: incomeRate(), t: Date.now(),
     personas: crabs.map(c => c.p),
   }));
 }
@@ -186,6 +196,7 @@ function load() {
   if (!s) return false;
   coins = s.coins || 0; lifetime = s.lifetime || 0;
   day = s.day || 1; tmin = s.tmin != null ? s.tmin : 7 * 60;
+  lastRentDay = s.lastRentDay || 0;
   for (const k in UPS) if (s.lv && s.lv[k] != null) UPS[k].lvl = s.lv[k];
   if (s.personas) crabs = s.personas.map(newCrab);
   const away = (Date.now() - (s.t || Date.now())) / 1000;
@@ -346,7 +357,10 @@ function updateKitchen(c, dt) {
     stepTo(c, c.target, spd, dt);
   } else if (c.kstate === "walk") {
     if (stepTo(c, c.target, spd, dt)) {
-      if (c.stepIdx === -1) { c.kstate = "work"; c.workMax = c.workT = 0.6; c.slotKind = null; c.slot = -1; }
+      if (c.stepIdx === -1) {
+        if (coins < INGREDIENT_COST[c.cust.recipe.raw]) { c.kstate = "waitCash"; return; }
+        c.kstate = "work"; c.workMax = c.workT = 0.6; c.slotKind = null; c.slot = -1;
+      }
       else if (c.stepIdx >= c.cust.recipe.steps.length) serve(c);
       else {
         const [kind] = c.cust.recipe.steps[c.stepIdx];
@@ -355,6 +369,8 @@ function updateKitchen(c, dt) {
         else { c.slotKind = kind; c.slot = s; c.target = stationSlotX(kind, s); c.kstate = "toSlot"; }
       }
     }
+  } else if (c.kstate === "waitCash") {
+    if (coins >= INGREDIENT_COST[c.cust.recipe.raw]) { c.kstate = "work"; c.workMax = c.workT = 0.6; c.slotKind = null; c.slot = -1; }
   } else if (c.kstate === "waitSlot") {
     const kind = c.cust.recipe.steps[c.stepIdx][0];
     const s = tryAcquire(kind);
@@ -369,7 +385,10 @@ function updateKitchen(c, dt) {
   } else if (c.kstate === "work") {
     c.workT -= dt;
     if (c.workT <= 0) {
-      if (c.stepIdx === -1) c.carrying = c.cust.recipe.raw;
+      if (c.stepIdx === -1) {
+        c.carrying = c.cust.recipe.raw;
+        expense(INGREDIENT_COST[c.carrying], c.x, FLOOR_Y - 40);
+      }
       else { c.carrying = c.cust.recipe.steps[c.stepIdx][2]; release(c); }
       popText(ITEM_NAMES[c.carrying] + "!", c.x - 8, FLOOR_Y - 28, [255, 255, 255]);
       c.stepIdx++;
@@ -436,6 +455,7 @@ function crabStatus(c) {
     if (c.kstate === "work" && c.slotKind === "grill") return "GRILLING";
     if (c.kstate === "work") return "GRABBING FOOD";
     if (c.carrying) return "CARRYING " + ITEM_NAMES[c.carrying];
+    if (c.kstate === "waitCash") return "SHORT ON CASH!";
     if (c.kstate === "waitSlot") return "WAITING FOR A SPOT";
     return "ON SHIFT";
   }
@@ -485,6 +505,7 @@ function evPos(ev) {
 function clampCam(x) { return Math.max(0, Math.min(WORLD_W - W, x)); }
 
 cv.addEventListener("click", (ev) => {
+  if (gameOver) { localStorage.removeItem(SAVE_KEY); location.reload(); return; }
   startMusic();
   const p = evPos(ev);
   if (dragMoved) return;
@@ -741,6 +762,10 @@ function drawPanel() {
   }
   const rate = incomeRate();
   text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [170, 150, 135], 5);
+  const rDays = rentDaysLeft(), rAmt = rentAmount();
+  const urgent = rDays === 0 || (rDays <= 1 && coins < rAmt);
+  const rTxt = "RENT $" + fmt(rAmt) + (rDays === 0 ? " TONIGHT" : " IN " + rDays + "D");
+  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, urgent ? [255, 120, 120] : [170, 150, 135], 4);
 
   if (tab === "shop") {
     for (const b of BUTTONS) {
@@ -778,6 +803,20 @@ function drawFloaters(dt) {
   }
   floaters = floaters.filter(f => f.t > 0);
 }
+function drawGameOver() {
+  ctx.fillStyle = "rgba(16,12,30,0.72)";
+  ctx.fillRect(0, 0, W, H);
+  const cx2 = W / 2;
+  rect(ctx, cx2 - 88, 66, 176, 84, [30, 20, 36]);
+  rect(ctx, cx2 - 86, 68, 172, 80, [255, 250, 235]);
+  textShadow(ctx, "EVICTED!", cx2 - textWidth("EVICTED!") / 2, 76, [230, 60, 70], [120, 30, 40]);
+  text(ctx, "THE LANDLORD CRAB TOOK", cx2 - 66, 92, [90, 60, 50], 6);
+  text(ctx, "BACK THE SHACK", cx2 - 41, 101, [90, 60, 50], 6);
+  text(ctx, "RENT OWED $" + fmt(rentAmount()), cx2 - 45, 114, [140, 60, 60], 6);
+  text(ctx, "SURVIVED " + day + " DAYS  EARNED $" + fmt(lifetime), cx2 - 78, 124, [90, 90, 110], 5);
+  const bl = ((time * 2) | 0) % 2;
+  if (bl) text(ctx, "CLICK TO START OVER", cx2 - 56, 137, [40, 110, 60], 6);
+}
 function drawToast() {
   if (!toast) return;
   const w2 = textWidth(toast.text) + 12;
@@ -792,9 +831,25 @@ let last = performance.now(), saveT = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now; time += dt;
-  tmin += dt * TS;
+  if (!gameOver) tmin += dt * TS;
   if (tmin >= 1440) { tmin -= 1440; day++; }
+  if (day % 7 === 0 && tmin >= 20 * 60 && lastRentDay !== day) {
+    lastRentDay = day;
+    const rent = rentAmount();
+    if (coins >= rent) {
+      coins -= rent;
+      earnHist.push({ t: time, amt: -rent });
+      toast = { text: "PAID RENT $" + fmt(rent) + " - SEE YOU NEXT WEEK", t: 6 };
+      popText("-$" + rent + " RENT", SHACK_DOOR, 110, [255, 120, 120]);
+      sfx.buy(); save();
+    } else {
+      gameOver = true; toast = null; save();
+      if (music) { music.pause(); music = null; }
+      sfx.angry();
+    }
+  }
 
+  if (!gameOver) {
   updateBus(dt);
   updateCustomers(dt);
   for (const c of crabs) {
@@ -810,6 +865,7 @@ function frame(now) {
   }
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
   saveT += dt; if (saveT > 5) { saveT = 0; save(); }
+  }
 
   drawBG();
   drawTown();
@@ -821,6 +877,7 @@ function frame(now) {
   drawFollowCard();
   drawPanel();
   drawToast();
+  if (gameOver) drawGameOver();
   requestAnimationFrame(frame);
 }
 
@@ -829,6 +886,7 @@ addEventListener("beforeunload", save);
 
 if (!load()) {
   crabs = [newCrab(makeCrabPersona(0)), newCrab(makeCrabPersona(1))];
+  coins = 100;   // opening cash: ingredients + first rent buffer
 }
 requestAnimationFrame(frame);
 

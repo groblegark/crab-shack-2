@@ -17,6 +17,10 @@ loop; at close they head home under the string lights and sleep.
   live status, and shift. Drag / arrow keys to free-roam, ESC to let go.
 - **Day cycle**: 6 real minutes per day — dawn, service, dusk, stars,
   moon, CLOSED sign, shack string lights.
+- **Stakes**: ingredients cost money (fish $4, fruit $2 — every dish has
+  a margin) and the landlord crab collects rent every 7th day at closing
+  time, 25% steeper each week. Can't pay? EVICTED — game over, click to
+  start again. You open with $100.
 - **Idle economy**: same coins/tips as CS1; SHOP tab has HIRE CRAB (each
   hire is a new random personality who moves into the next house),
   SHOES, KNIFE, FLAME, EXPAND, ADS. Saves to localStorage with offline
