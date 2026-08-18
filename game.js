@@ -129,13 +129,26 @@ function crabMove(c) {
 function crabWork(c) { return TRAITS[c.p.trait].work; }
 
 // ---------------------------------------------------------------- sound (from CS1)
-const MUSIC_SRC = "music.mp3";
+const PLAYLIST = [
+  { src: "music/pixel-wave-waltz.mp3", name: "PIXEL WAVE WALTZ" },
+  { src: "music/regalia-of-the-surf.mp3", name: "REGALIA OF THE SURF" },
+  { src: "music/regalia-waltz.mp3", name: "REGALIA WALTZ" },
+  { src: "music/butter-pow.mp3", name: "BUTTER POW" },
+  { src: "music/carnival-of-the-glitch.mp3", name: "CARNIVAL OF THE GLITCH" },
+];
 let musicOn = true, music = null;
-function startMusic() {
-  if (music || !musicOn) return;
-  music = new Audio(MUSIC_SRC); music.loop = true; music.volume = 0.55;
-  music.play().catch(() => { music = null; });
+let trackIdx = (Math.random() * PLAYLIST.length) | 0;
+function playTrack(i) {
+  if (music) { music.pause(); music = null; }
+  trackIdx = ((i % PLAYLIST.length) + PLAYLIST.length) % PLAYLIST.length;
+  const t = PLAYLIST[trackIdx];
+  music = new Audio(t.src);
+  music.volume = 0.55;
+  music.addEventListener("ended", () => { music = null; if (musicOn) playTrack(trackIdx + 1); });
+  music.play().then(() => { toast = { text: "NOW PLAYING: " + t.name, t: 4 }; })
+    .catch(() => { music = null; });
 }
+function startMusic() { if (!music && musicOn) playTrack(trackIdx); }
 function toggleMusic() {
   musicOn = !musicOn;
   if (!musicOn && music) { music.pause(); music = null; } else if (musicOn) startMusic();
@@ -580,6 +593,7 @@ cv.addEventListener("click", (ev) => {
 addEventListener("keydown", (e) => {
   if (e.key === "m") soundOn = !soundOn;
   if (e.key === "n") toggleMusic();
+  if (e.key === "b" && musicOn) playTrack(trackIdx + 1);   // next track
   if (e.key === "ArrowLeft") { camX = clampCam(camX - 24); followIdx = -1; }
   if (e.key === "ArrowRight") { camX = clampCam(camX + 24); followIdx = -1; }
   if (e.key === "Escape") followIdx = -1;

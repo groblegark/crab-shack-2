@@ -40,6 +40,8 @@ running ads — survives indefinitely (7/8 seeds at 40 days). First night
 is rent-free, and the founding duo PINCHY & CLAWDIA are always the same
 so every opening is fair; hires are the gacha.
 
-Music: "Pixel Wave Waltz" by Matt Clanker, made with Suno.
+Music by Matt Clanker, made with Suno — a rotating playlist: "Pixel
+Wave Waltz", "Regalia of the Surf", "Regalia Waltz", "Butter Pow", and
+"Carnival of the Glitch". `N` toggles music, `B` skips to the next track.
 Static page, no build step — GitHub Pages from main/root. `?fresh` for a
 throwaway session. M/N toggle sfx/music.
