@@ -19,9 +19,9 @@ loop; at close they head home under the string lights and sleep.
   moon, CLOSED sign, shack string lights.
 - **Stakes — everything settles nightly at 20:00**: ingredients cost
   money (fish $5, fruit $3 — every dish has a margin); you pay each crab
-  an $18/day wage; each crab pays $8/day rent on their house from their
+  an $18/day wage (and buy their own staff meal at the shack after a shift); each crab pays $8/day rent on their house from their
   own wallet (shown on the follow card); and the landlord collects a
-  flat, honest $115/night for the shack — announced up front, first
+  flat, honest $120/night for the shack — announced up front, first
   night free, never changes. Miss the shack rent and it's EVICTED —
   game over. Miss a crab's wages and they can't make their own rent:
   they lose the house and move into the town SHELTER (rent-free), keep

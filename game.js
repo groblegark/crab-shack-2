@@ -80,13 +80,14 @@ let lastRentDay = 0, gameOver = false, newConfirmT = 0;
 let screen = "title", hasSave = false, wiping = false;
 function newGame() { wiping = true; localStorage.removeItem(SAVE_KEY); location.reload(); }
 const CRAB_WAGE = 18, HOUSE_RENT = 8;
-function rentAmount() { return day <= 1 ? 0 : 115; }
+function rentAmount() { return day <= 1 ? 0 : 120; }
 function nightlyDue() { return rentAmount() + CRAB_WAGE * crabs.length; }
 const busy = { board: [false, false, false], grill: [false, false, false] };
 const bus = { x: 360, dir: 1, state: "drive", dwellT: 0, riders: [] };
 let earnHist = [];
 
 const CRAB_ARTS = CRAB_COLORS.map(c => crabArt(c[0], c[1]));
+const LANDLORD_ART = crabArt([255, 200, 80], [190, 140, 30]);
 const TOURIST_ARTS = TOURIST_STYLES.map(touristArt);
 const HOUSES = CRAB_COLORS.map(c => houseArt(c[0]));
 const BUGGIES = CRAB_COLORS.map(c => buggyArt(c[0]));
@@ -350,7 +351,9 @@ function updateSchedule(c) {
   if (c.dayState === "working" && c.pendingOff && c.kstate === "idle") {
     c.duty = false; c.pendingOff = false;
     if (c.carrying) c.carrying = null;
-    startCommute(c, false);
+    // grab a staff meal at the shack if it's still open and the wallet allows
+    if (shackOpen() && c.p.wallet >= 16 && crabs.some(o => o !== c && o.duty)) c.dayState = "toDinner";
+    else startCommute(c, false);
   }
 }
 function shackNeeds(c) { return true; }
@@ -426,7 +429,8 @@ function serve(c) {
   const cust = c.cust;
   if (cust && cust.state === "waiting") {
     const tipMult = TRAITS[c.p.trait].tip;
-    const tip = cust.recipe.pay * 0.5 * (cust.patience / cust.maxPatience) * tipMult;
+    const tip = cust.isStaff ? 0 : cust.recipe.pay * 0.5 * (cust.patience / cust.maxPatience) * tipMult;
+    if (cust.isStaff) cust.crab.p.wallet = Math.max(0, cust.crab.p.wallet - cust.recipe.pay);
     earn(cust.recipe.pay + tip, cust.x, 126);
     popText(ITEM_NAMES[cust.recipe.icon], cust.x - 14, 116, [140, 255, 160]);
     cust.served = true; cust.state = "leaving"; cust.happy = true; sfx.ding();
@@ -437,7 +441,11 @@ function serve(c) {
 // ---------------------------------------------------------------- customers
 function newCustomer() {
   const r = RECIPES[(Math.random() * RECIPES.length) | 0];
-  return { recipe: r, art: TOURIST_ARTS[(Math.random() * TOURIST_ARTS.length) | 0],
+  return { recipe: r,
+    name: CUSTOMER_NAMES[(Math.random() * CUSTOMER_NAMES.length) | 0],
+    color: (Math.random() * CRAB_COLORS.length) | 0,
+    acc: ACC_KEYS[(Math.random() * ACC_KEYS.length) | 0],
+    animT: Math.random() * 9,
     x: WORLD_W + 10, state: "arriving", patience: 50, maxPatience: 50,
     claimed: false, served: false };
 }
@@ -450,7 +458,7 @@ function updateCustomers(dt) {
         k.x -= 45 * dt;
         if (k.x <= slot) {
           k.x = slot; k.state = "waiting";
-          popText(ITEM_NAMES[k.recipe.icon] + "?", k.x - 10, FLOOR_Y - 42, [255, 255, 255]);
+          popText(k.name + ": " + ITEM_NAMES[k.recipe.icon] + "?", k.x - 30, FLOOR_Y - 42, [255, 255, 255]);
         }
       } else {
         if (k.x > slot) k.x = Math.max(slot, k.x - 45 * dt);
@@ -462,7 +470,10 @@ function updateCustomers(dt) {
       }
     } else if (k.state === "leaving") k.x += (k.happy ? 50 : 75) * dt;
   }
-  customers = customers.filter(k => k.x < WORLD_W + 20);
+  customers = customers.filter(k => {
+    if (k.isStaff && k.state === "leaving") { k.gone = true; return false; }
+    return k.x < WORLD_W + 20;
+  });
   spawnT -= dt;
   const anyDuty = crabs.some(c => c.duty);
   const inQueue = customers.filter(k => k.state !== "leaving").length;
@@ -487,6 +498,8 @@ function crabStatus(c) {
     if (c.kstate === "waitSlot") return "WAITING FOR A SPOT";
     return "ON SHIFT";
   }
+  if (c.dayState === "toDinner") return "GRABBING DINNER";
+  if (c.dayState === "dining") return c.dinerCust && c.dinerCust.claimed ? "DINNER'S COMING" : "WAITING FOR DINNER";
   const toWork = c.dayState === "toWork";
   if (c.cstate === "waitBus") return "WAITING FOR THE BUS";
   if (c.cstate === "onBus") return "RIDING THE BUS";
@@ -558,10 +571,17 @@ cv.addEventListener("click", (ev) => {
       if (hasSave && p.y >= 118 && p.y < 134) { screen = "play"; startMusic(); sfx.ding(); return; }
       const ny = hasSave ? 138 : 122;
       if (p.y >= ny && p.y < ny + 16) {
-        if (!hasSave || newConfirmT > 0) { hasSave ? newGame() : (screen = "play", startMusic(), sfx.ding()); }
+        if (!hasSave || newConfirmT > 0) { hasSave ? newGame() : (screen = "intro", startMusic(), sfx.ding()); }
         else { newConfirmT = 3; sfx.buy(); }
         return;
       }
+    }
+    return;
+  }
+  if (screen === "intro") {
+    const p = evPos(ev);
+    if (p.x >= W / 2 - 56 && p.x < W / 2 + 56 && p.y >= 152 && p.y < 170) {
+      screen = "play"; sfx.ding();
     }
     return;
   }
@@ -735,6 +755,26 @@ function drawTown() {
   wblit(PASS, STX.pass[0], STATION_BOTTOM - PASS.h);
 }
 
+function drawLandlord() {
+  const t0 = 19.5 * 60;
+  if (tmin < t0 || tmin > 20 * 60 + 30) return;
+  const t = Math.min(1, (tmin - t0) / 20);
+  const lx = STX.pass[0] + 96 - t * 66;
+  const ly = FLOOR_Y - 12;
+  wblit(LANDLORD_ART.a, lx, ly, true);
+  wblit(ACCESSORIES.shades.art, lx + 1, ly + 1, true);
+  if (t >= 1) {
+    const msg = tmin < 20 * 60 ? "RENT TIME!" : (coins >= 0 ? "PLEASURE." : "");
+    if (msg) {
+      const tw = textWidth(msg) + 6;
+      let bx = lx + 8 - tw / 2 - camX;
+      bx = Math.max(1, Math.min(bx, W - tw - 1));
+      rect(ctx, bx, ly - 22, tw, 11, [30, 20, 36]);
+      rect(ctx, bx + 1, ly - 21, tw - 2, 9, [255, 240, 200]);
+      text(ctx, msg, bx + 3, ly - 20, [120, 70, 20]);
+    }
+  }
+}
 function drawSwoop() {
   // every so often a gull dives at the snack queue
   const T = time % 41;
@@ -809,9 +849,28 @@ function drawCrab(c) {
 
 function drawCustomers() {
   for (const k of customers) {
-    wblit(k.art, k.x, FLOOR_Y - 19, k.state !== "leaving");
+    if (k.isStaff) { /* the staff crab draws itself */ }
+    else {
+      k.animT += 0.016;
+      const arts = CRAB_ARTS[k.color];
+      const moving = k.state !== "waiting";
+      const art = moving && ((k.animT * 8) | 0) % 2 ? arts.b : arts.a;
+      const flip = k.state !== "leaving";
+      const cy = FLOOR_Y - 12;
+      wblit(art, k.x, cy, flip);
+      const acc = ACCESSORIES[k.acc];
+      if (acc) {
+        const ax = flip ? 16 - acc.dx - acc.art.w : acc.dx;
+        wblit(acc.art, k.x + ax, cy + acc.dy, flip);
+      }
+      if (k.state === "waiting") {
+        const nm = k.name.split(" ")[0].slice(0, 6);
+        const nx = k.x + 8 - textWidth(nm, 4) / 2 - camX;
+        if (nx > -30 && nx < W) text(ctx, nm, nx, FLOOR_Y + 2, [110, 88, 60], 4);
+      }
+    }
     if (k.state === "waiting" && !k.served) {
-      const bx = k.x - camX - 1, by = FLOOR_Y - 36;
+      const bx = k.x - camX - 1, by = FLOOR_Y - 34;
       if (bx > -16 && bx < W) {
         rect(ctx, bx, by, 14, 13, [30, 20, 36]);
         rect(ctx, bx + 1, by + 1, 12, 11, [255, 255, 255]);
@@ -913,7 +972,9 @@ function drawPanel() {
   }
   const due = nightlyDue();
   const rTxt = "DUE 20:00 $" + fmt(due);
-  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, coins < due ? [255, 120, 120] : [170, 150, 135], 4);
+  const crunch = coins < due && tmin > 17 * 60 && tmin < 20 * 60;
+  const rCol = crunch && ((time * 2) | 0) % 2 ? [255, 60, 60] : coins < due ? [255, 120, 120] : [170, 150, 135];
+  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, rCol, 4);
 
   if (tab === "shop") {
     for (const b of BUTTONS) {
@@ -950,6 +1011,33 @@ function drawFloaters(dt) {
     if (fx > -60 && fx < W) textShadow(ctx, f.text, fx, f.y, f.color, [30, 20, 36]);
   }
   floaters = floaters.filter(f => f.t > 0);
+}
+function drawIntro() {
+  ctx.fillStyle = "rgba(16,20,50,0.5)";
+  ctx.fillRect(0, 0, W, H);
+  const cw = 196, cx2 = W / 2 - cw / 2;
+  rect(ctx, cx2 - 2, 22, cw + 4, 152, [30, 20, 36]);
+  rect(ctx, cx2, 24, cw, 148, [255, 250, 235]);
+  textShadow(ctx, "THE LEASE", W / 2 - textWidth("THE LEASE") / 2, 30, [120, 70, 30], [220, 200, 170]);
+  // Mr. Pincherton, in the flesh
+  blit(ctx, LANDLORD_ART.a, cx2 + 8, 42);
+  blit(ctx, ACCESSORIES.shades.art, cx2 + 8 + 1, 42 + 1);
+  text(ctx, "MR. PINCHERTON'S TERMS:", cx2 + 30, 44, [90, 60, 40], 5);
+  const terms = [
+    ["THE SHACK IS YOURS TO RUN", [70, 70, 90]],
+    ["RENT: $120, NIGHTLY AT 20:00", [170, 50, 50]],
+    ["YOUR FIRST NIGHT IS FREE", [40, 130, 60]],
+    ["CREW WAGES: $18 EACH, NIGHTLY", [70, 70, 90]],
+    ["CREW PAY THEIR OWN HOME RENT", [70, 70, 90]],
+    ["MISS MY RENT AND I TAKE THE SHACK", [170, 50, 50]],
+  ];
+  for (let i = 0; i < terms.length; i++)
+    text(ctx, "- " + terms[i][0], cx2 + 8, 62 + i * 12, terms[i][1], 5);
+  text(ctx, "GOOD LUCK. I'LL COME COLLECT.", cx2 + 8, 62 + terms.length * 12 + 4, [110, 90, 80], 4);
+  const bx = W / 2 - 56;
+  rect(ctx, bx, 152, 112, 18, [30, 20, 36]);
+  rect(ctx, bx + 1, 153, 110, 16, [190, 140, 80]);
+  text(ctx, "SIGN WITH A CLAW", bx + 9, 158, [40, 24, 16]);
 }
 function drawTitle() {
   ctx.fillStyle = "rgba(16,20,50,0.35)";
@@ -1066,6 +1154,14 @@ function frame(now) {
     }
   }
 
+  if (screen === "intro") {
+    camX = clampCam(SHACK_X0 - 30);
+    drawBG(); drawTown();
+    for (const c of crabs) drawCrab(c);
+    drawIntro();
+    requestAnimationFrame(frame);
+    return;
+  }
   if (screen === "title") {
     // attract mode: slow ping-pong pan across the town
     const span = WORLD_W - W, s = (time * 9) % (2 * span);
@@ -1092,6 +1188,21 @@ function frame(now) {
     updateSchedule(c);
     if (c.dayState === "toWork" || c.dayState === "toHome") updateCommute(c, dt);
     else if (c.dayState === "working") updateKitchen(c, dt);
+    else if (c.dayState === "toDinner") {
+      if (stepTo(c, QUEUE_X0 + 46, crabMove(c), dt)) {
+        const r = RECIPES[(Math.random() * RECIPES.length) | 0];
+        const cust = { recipe: r, isStaff: true, crab: c, name: c.p.name,
+          color: c.p.color, acc: c.p.acc,
+          x: c.x, state: "arriving", patience: 40, maxPatience: 40,
+          claimed: false, served: false };
+        customers.push(cust);
+        c.dinerCust = cust; c.dayState = "dining";
+      }
+    } else if (c.dayState === "dining") {
+      const k = c.dinerCust;
+      if (!k || k.gone) { c.dinerCust = null; startCommute(c, false); }
+      else { c.x = k.x; c.flip = true; }
+    }
     maybeQuip(c, dt);
   }
   if (followIdx >= 0 && crabs[followIdx]) {
@@ -1106,6 +1217,7 @@ function frame(now) {
   drawBG();
   drawTown();
   drawCustomers();
+  drawLandlord();
   drawSwoop();
   drawBus();
   for (const c of crabs) drawCrab(c);
@@ -1125,7 +1237,7 @@ hasSave = load();
 if (!hasSave) {
   crabs = [newCrab(makeCrabPersona(0)), newCrab(makeCrabPersona(1))];
   coins = 140;   // opening cash: ingredients + first rent buffer
-  toast = { text: "LANDLORD: RENT IS $115 A NIGHT. FIRST NIGHT FREE!", t: 9 };
+  toast = { text: "LANDLORD: RENT IS $120 A NIGHT. FIRST NIGHT FREE!", t: 9 };
 }
 requestAnimationFrame(frame);
 
