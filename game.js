@@ -265,9 +265,14 @@ function leaveGmin(c) {
 
 function stepTo(c, target, speed, dt) {
   const d = target - c.x;
-  if (Math.abs(d) <= 2) { c.x = target; return true; }
+  const step = speed * dt;
+  // Arrive if this step would reach or overshoot the target. A fixed 2px
+  // window alone strands anyone whose step is bigger than the window: they
+  // jump the target every frame and oscillate forever, never clocking in.
+  // (At 60fps a step is well under 2px, so normal play is unchanged.)
+  if (Math.abs(d) <= Math.max(2, step)) { c.x = target; return true; }
   c.flip = d < 0;
-  c.x += Math.sign(d) * speed * dt;
+  c.x += Math.sign(d) * step;
   return false;
 }
 
@@ -529,7 +534,14 @@ function tryBuy(key) {
   if (u.lvl >= u.max || coins < upCost(u)) return;
   coins -= upCost(u); u.lvl++;
   if (key === "chef") {
-    const p2 = makeCrabPersona(crabs.length + ((Math.random() * 6) | 0));
+    // Index by the real crew position: makeCrabPersona derives name, colour
+    // and the alternating M/E shift from it, so a random offset here handed
+    // out duplicate names and coin-flipped the shift (leaving mornings
+    // unstaffed). Trait/mode/accessory are the gacha, and still random.
+    const p2 = makeCrabPersona(crabs.length);
+    const taken = new Set(crabs.map(k => k.p.name));
+    const freeNames = CRAB_NAMES.filter(n => !taken.has(n));
+    if (freeNames.length) p2.name = freeNames[(Math.random() * freeNames.length) | 0];
     const used = new Set(crabs.filter(k => !k.p.homeless).map(k => k.p.house));
     p2.homeless = true;
     for (let h = 0; h < HOUSE_XS.length; h++) if (!used.has(h)) { p2.house = h; p2.homeless = false; break; }
@@ -1107,8 +1119,13 @@ function drawTitle() {
   rect(ctx, bx + 1, ny + 1, 98, 14, conf ? [150, 60, 60] : [120, 100, 80]);
   text(ctx, conf ? "WIPE SAVE?" : "NEW GAME", bx + (conf ? 21 : 26), ny + 5, conf ? [255, 220, 220] : [235, 225, 210]);
   if (((time * 1.5) | 0) % 2) text(ctx, "CLICK TO PLAY", W / 2 - 38, 162, [255, 250, 235], 6);
-  text(ctx, "MUSIC: PIXEL WAVE WALTZ - MATT CLANKER", 14, PANEL_Y + 8, [200, 182, 165]);
-  text(ctx, "BUILT ON THE SNESCAT TOY PPU", 44, PANEL_Y + 20, [165, 145, 128]);
+  // the playlist rotates, so name whatever is actually queued up. Split off
+  // the credit: "MUSIC: CARNIVAL OF THE GLITCH - MATT CLANKER" is wider than
+  // the 256px screen.
+  const track = "MUSIC: " + PLAYLIST[trackIdx].name;
+  text(ctx, track, W / 2 - textWidth(track) / 2, PANEL_Y + 6, [200, 182, 165]);
+  text(ctx, "BY MATT CLANKER", W / 2 - textWidth("BY MATT CLANKER") / 2, PANEL_Y + 18, [200, 182, 165]);
+  text(ctx, "BUILT ON THE SNESCAT TOY PPU", 44, PANEL_Y + 30, [165, 145, 128]);
 }
 function drawGameOver() {
   ctx.fillStyle = "rgba(16,12,30,0.72)";
