@@ -530,6 +530,19 @@ addEventListener("mousemove", (ev) => {
   if (dragMoved) camX = clampCam(dragCamX - (p.x - dragStartX));
 });
 addEventListener("mouseup", () => { dragging = false; });
+cv.addEventListener("touchstart", (ev) => {
+  const t = ev.touches[0];
+  const p = evPos(t);
+  if (p.y < PANEL_Y) { dragging = true; dragStartX = p.x; dragCamX = camX; dragMoved = false; }
+}, { passive: true });
+cv.addEventListener("touchmove", (ev) => {
+  if (!dragging) return;
+  ev.preventDefault();
+  const p = evPos(ev.touches[0]);
+  if (Math.abs(p.x - dragStartX) > 6) { dragMoved = true; followIdx = -1; }
+  if (dragMoved) camX = clampCam(dragCamX - (p.x - dragStartX));
+}, { passive: false });
+cv.addEventListener("touchend", () => { setTimeout(() => { dragging = false; dragMoved = false; }, 50); });
 function evPos(ev) {
   const r = cv.getBoundingClientRect();
   return { x: (ev.clientX - r.left) * (cv.width / r.width), y: (ev.clientY - r.top) * (cv.height / r.height) };
@@ -727,7 +740,8 @@ function drawCrab(c) {
     return;
   }
   const working = c.kstate === "work" && c.dayState === "working";
-  const moving = c.dayState !== "home" || Math.abs((c.target || c.x) - c.x) > 2;
+  const moving = Math.abs(c.x - (c._lx == null ? c.x : c._lx)) > 0.05;
+  c._lx = c.x;
   let art;
   if (working) art = ((c.animT * 6) | 0) % 2 ? arts.w : arts.a;
   else if (moving) art = ((c.animT * 8) | 0) % 2 ? arts.a : arts.b;
@@ -754,8 +768,8 @@ function drawCrab(c) {
     wrect(c.x, y - 10, 16, 3, [30, 20, 36]);
     wrect(c.x + 1, y - 9, Math.round(14 * frac), 1, [96, 232, 120]);
   }
-  // quip bubble
-  if (c.quip) {
+  // quip bubble (only when the crab is on screen)
+  if (c.quip && c.x - camX > -20 && c.x - camX < W + 20) {
     const tw = textWidth(c.quip.text) + 6;
     let bx = c.x + 8 - tw / 2 - camX;
     bx = Math.max(1, Math.min(bx, W - tw - 1));
