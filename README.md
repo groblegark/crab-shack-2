@@ -49,4 +49,5 @@ Music by Matt Clanker, made with Suno — a rotating playlist: "Pixel
 Wave Waltz", "Regalia of the Surf", "Regalia Waltz", "Butter Pow", and
 "Carnival of the Glitch". `N` toggles music, `B` skips to the next track.
 Static page, no build step — GitHub Pages from main/root. `?fresh` for a
-throwaway session. M/N toggle sfx/music.
+throwaway session. M/N toggle sfx/music. `>>` / `>>>` in the panel (or
+`F`) fast-forward time at 2x/3x.
