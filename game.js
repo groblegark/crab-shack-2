@@ -241,6 +241,7 @@ function maybeQuip(c, dt) {
   if (c.quipT <= 0 && !c.hidden) {
     const isNight = darkness() > 0.7 && c.dayState === "home";
     let lines = isNight ? ["ZZZ..."] : TRAITS[c.p.trait].quips[quipContext(c)];
+    if (!isNight && Math.random() < 0.13) lines = TOWN_QUIPS[quipContext(c)];
     if (c.p.homeless && quipContext(c) === "home" && !isNight)
       lines = ["SAVING FOR A PLACE", "SHELTER SOUP AGAIN", "I'LL BOUNCE BACK"];
     c.quip = { text: lines[(Math.random() * lines.length) | 0], t: 2.6 };
@@ -664,6 +665,13 @@ function drawBG() {
       const off = ((Math.sin(time * 1.3 + y) * 8) | 0) + ((y * 7) % 13);
       rect(ctx, x + off, y, 10, 1, [96, 200, 255]);
     }
+  // glints on the water
+  for (let i = 0; i < 6; i++) {
+    if (((time * 2 + i * 1.7) | 0) % 3) continue;
+    const gx = (i * 89 + ((time * 0.7) | 0) * 37) % W;
+    const gy = SKY_H + 3 + (i * 11 + ((time * 0.4) | 0) * 5) % (SHORE_Y - SKY_H - 7);
+    px(ctx, gx, gy, [235, 250, 255]);
+  }
   const f = (Math.sin(time * 0.9) * 3) | 0;
   rect(ctx, 0, SHORE_Y - 3 + Math.max(0, f), W, 2, [230, 250, 255]);
   // sand (world)
@@ -691,7 +699,7 @@ function drawTown() {
   for (const s of BUS_STOPS) wblit(BUS_STOP, s - 3, ROAD_Y1 + 2);
   // scenery
   wblit(PALM, 415, 96); wblit(PALM, 545, 92, true); wblit(PALM, 930, 96); wblit(PALM, 985, 100, true);
-  wblit(UMBRELLA, 890, SHORE_Y - 4); wblit(UMBRELLA, 470, SHORE_Y - 2);
+  wblit(UMBRELLA, 890, SHORE_Y - 4); wblit(UMBRELLA, 545, SHORE_Y - 2);
   // parked vehicles
   for (const c of crabs) {
     if (c.dayState !== "working") continue;
@@ -727,8 +735,26 @@ function drawTown() {
   wblit(PASS, STX.pass[0], STATION_BOTTOM - PASS.h);
 }
 
+function drawSwoop() {
+  // every so often a gull dives at the snack queue
+  const T = time % 41;
+  if (T > 5.5 || darkness() > 0.5) return;
+  const t = T / 5.5;
+  const wx2 = 950 - t * 220;
+  const gy = 34 + Math.sin(t * Math.PI) * 98;
+  wblit(GULL[((time * 6) | 0) % 2], wx2, gy);
+}
 function drawBus() {
-  wblit(BUS2, bus.x, ROAD_Y1 - BUS2.h - 1, bus.dir < 0);
+  const by = ROAD_Y1 - BUS2.h - 1;
+  wblit(BUS2, bus.x, by, bus.dir < 0);
+  // riders peek through the windows
+  const riders = crabs.filter(c => c.cstate === "onBus");
+  for (let i = 0; i < Math.min(riders.length, 5); i++) {
+    const wx2 = bus.x + 8 + i * 12;
+    wrect(wx2, by + 6, 2, 2, [30, 20, 36]);
+    wrect(wx2 + 4, by + 6, 2, 2, [30, 20, 36]);
+    wrect(wx2 + 1, by + 4, 4, 1, CRAB_COLORS[riders[i].p.color][0]);
+  }
 }
 
 function drawCrab(c) {
@@ -805,6 +831,23 @@ function drawNight() {
   if (dark <= 0) return;
   ctx.fillStyle = `rgba(16,20,64,${0.45 * dark})`;
   ctx.fillRect(0, 0, W, PANEL_Y);
+  if (dark > 0.5) {
+    // lit windows where somebody's home
+    for (const c of crabs) {
+      if (c.dayState !== "home" || c.hidden) continue;
+      if (c.p.homeless) wrect(SHELTER_X + 22, ROAD_Y0 - 14, 8, 8, [255, 216, 96]);
+      else wrect(HOUSE_XS[c.p.house] + 8, ROAD_Y0 - 18, 10, 7, [255, 216, 96]);
+    }
+    // fireflies over the dunes
+    if (dark > 0.65) {
+      for (let i = 0; i < 5; i++) {
+        if (((time * 3 + i) | 0) % 4 === 0) continue;
+        const fx = 260 + i * 170 + Math.sin(time * 0.31 + i * 2.1) * 55;
+        const fy = 148 + Math.sin(time * 0.73 + i * 1.3) * 9;
+        wrect(fx, fy, 1, 1, [190, 255, 140]);
+      }
+    }
+  }
   // string lights on the shack at night
   if (dark > 0.4) {
     for (let x = SHACK_X0 + 4; x < SHACK_X1; x += 10) {
@@ -815,6 +858,15 @@ function drawNight() {
   }
 }
 
+function crabMood(c) {
+  if (c.p.homeless) return ["DOWN", [190, 80, 80]];
+  if (c.p.wallet < 10) return ["BROKE", [190, 80, 80]];
+  if (c.p.wallet > 120) return ["FLUSH", [180, 140, 30]];
+  if (darkness() > 0.7 && c.dayState !== "home") return ["TIRED", [120, 120, 140]];
+  if (darkness() > 0.7 && c.dayState === "home") return ["COZY", [180, 120, 60]];
+  if (c.dayState === "working" && c.kstate === "work") return ["BUSY", [40, 110, 190]];
+  return ["SUNNY", [40, 150, 70]];
+}
 function drawFollowCard() {
   if (followIdx < 0 || !crabs[followIdx]) return;
   const c = crabs[followIdx], p = c.p;
@@ -826,11 +878,16 @@ function drawFollowCard() {
   const acc = ACCESSORIES[c.duty ? "toque" : p.acc];
   if (acc) blit(ctx, acc.art, 7 + acc.dx, 14 + acc.dy);
   text(ctx, p.name, 29, 5, [40, 30, 40]);
+  const [mood, mcol] = crabMood(c);
+  text(ctx, mood, 126 - textWidth(mood, 4), 5, mcol, 4);
   text(ctx, TRAITS[p.trait].label + " " + MODES[p.mode].label, 29, 13, [120, 90, 60], 5);
   text(ctx, crabStatus(c), 29, 21, [30, 110, 60], 5);
   text(ctx, "SHIFT " + SHIFTS[p.shift].label, 29, 28, [110, 110, 130], 4);
+  const trend = p.walletPrev == null ? 0 : p.wallet - p.walletPrev;
   const wTxt = "$" + fmt(Math.max(0, p.wallet));
-  text(ctx, wTxt, 126 - textWidth(wTxt, 4), 28, p.homeless ? [190, 80, 80] : [140, 110, 40], 4);
+  const wx3 = 126 - textWidth(wTxt, 4);
+  text(ctx, wTxt, wx3, 28, p.homeless ? [190, 80, 80] : [140, 110, 40], 4);
+  if (trend) text(ctx, trend > 0 ? "+" : "-", wx3 - 6, 28, trend > 0 ? [40, 150, 70] : [190, 80, 80], 4);
 }
 
 function drawPanel() {
@@ -958,6 +1015,7 @@ function frame(now) {
   if (screen === "play" && tmin >= 20 * 60 && lastRentDay !== day) {
     lastRentDay = day;
     (window.dayLog = window.dayLog || []).push({ day, close: Math.round(coins) });
+    for (const c of crabs) c.p.walletPrev = c.p.wallet;
     // 1. wages: pay every crab you can afford
     let wages = 0;
     for (const c of crabs) {
@@ -999,7 +1057,7 @@ function frame(now) {
       if (!evictedNames.length && !toast) toast = { text: rent === 0
         ? "FIRST NIGHT FREE - WELCOME TO THE BOARDWALK!"
         : "PAID $" + fmt(wages) + " WAGES + $" + fmt(rent) + " RENT", t: 5 };
-      popText("-$" + rent + " RENT", SHACK_DOOR, 110, [255, 120, 120]);
+      if (rent > 0) popText("-$" + rent + " RENT", SHACK_DOOR, 110, [255, 120, 120]);
       sfx.buy(); save();
     } else {
       gameOver = true; toast = null; save();
@@ -1013,7 +1071,12 @@ function frame(now) {
     const span = WORLD_W - W, s = (time * 9) % (2 * span);
     camX = s < span ? s : 2 * span - s;
     updateBus(dt);
-    for (const c of crabs) { c.animT += dt; maybeQuip(c, dt); }
+    for (const c of crabs) {
+      c.animT += dt; maybeQuip(c, dt);
+      if (c._wt == null || Math.abs(c.x - c._wt) < 2)
+        c._wt = Math.max(20, Math.min(WORLD_W - 30, c.x + Math.random() * 90 - 45));
+      else stepTo(c, c._wt, 11, dt);
+    }
     drawBG(); drawTown(); drawBus();
     for (const c of crabs) drawCrab(c);
     drawNight();
@@ -1043,6 +1106,7 @@ function frame(now) {
   drawBG();
   drawTown();
   drawCustomers();
+  drawSwoop();
   drawBus();
   for (const c of crabs) drawCrab(c);
   drawFloaters(dt);
