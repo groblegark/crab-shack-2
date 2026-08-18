@@ -714,7 +714,7 @@ function drawTown() {
   // the crab shelter
   wblit(SHELTER2, SHELTER_X, ROAD_Y0 - SHELTER2.h);
   if (SHELTER_X - camX > -80 && SHELTER_X - camX < W)
-    text(ctx, "SHELTER", SHELTER_X + 14 - camX, ROAD_Y0 - SHELTER2.h - 7, [230, 220, 200], 4);
+    smallText(ctx, "SHELTER", SHELTER_X + 15 - camX, ROAD_Y0 - SHELTER2.h - 7, [235, 225, 205]);
   // bus stops
   for (const s of BUS_STOPS) wblit(BUS_STOP, s - 3, ROAD_Y1 + 2);
   // scenery
@@ -866,7 +866,7 @@ function drawCustomers() {
       if (k.state === "waiting") {
         const nm = k.name.split(" ")[0].slice(0, 6);
         const nx = k.x + 8 - textWidth(nm, 4) / 2 - camX;
-        if (nx > -30 && nx < W) text(ctx, nm, nx, FLOOR_Y + 2, [110, 88, 60], 4);
+        if (nx > -30 && nx < W) smallText(ctx, nm, nx, FLOOR_Y + 2, [100, 80, 55]);
       }
     }
     if (k.state === "waiting" && !k.served) {
@@ -938,15 +938,15 @@ function drawFollowCard() {
   if (acc) blit(ctx, acc.art, 7 + acc.dx, 14 + acc.dy);
   text(ctx, p.name, 29, 5, [40, 30, 40]);
   const [mood, mcol] = crabMood(c);
-  text(ctx, mood, 126 - textWidth(mood, 4), 5, mcol, 4);
-  text(ctx, TRAITS[p.trait].label + " " + MODES[p.mode].label, 29, 13, [120, 90, 60], 5);
-  text(ctx, crabStatus(c), 29, 21, [30, 110, 60], 5);
-  text(ctx, "SHIFT " + SHIFTS[p.shift].label, 29, 28, [110, 110, 130], 4);
+  smallText(ctx, mood, 126 - smallTextWidth(mood), 5, mcol);
+  smallText(ctx, TRAITS[p.trait].label + " " + MODES[p.mode].label, 29, 14, [120, 90, 60]);
+  smallText(ctx, crabStatus(c), 29, 21, [25, 105, 55]);
+  smallText(ctx, "SHIFT " + SHIFTS[p.shift].label, 29, 28, [105, 105, 125]);
   const trend = p.walletPrev == null ? 0 : p.wallet - p.walletPrev;
   const wTxt = "$" + fmt(Math.max(0, p.wallet));
-  const wx3 = 126 - textWidth(wTxt, 4);
-  text(ctx, wTxt, wx3, 28, p.homeless ? [190, 80, 80] : [140, 110, 40], 4);
-  if (trend) text(ctx, trend > 0 ? "+" : "-", wx3 - 6, 28, trend > 0 ? [40, 150, 70] : [190, 80, 80], 4);
+  const wx3 = 126 - smallTextWidth(wTxt);
+  smallText(ctx, wTxt, wx3, 28, p.homeless ? [190, 80, 80] : [140, 110, 40]);
+  if (trend) smallText(ctx, trend > 0 ? "+" : "-", wx3 - 5, 28, trend > 0 ? [40, 150, 70] : [190, 80, 80]);
 }
 
 function drawPanel() {
@@ -955,26 +955,26 @@ function drawPanel() {
   blit(ctx, COIN, 4, PANEL_Y + 2);
   textShadow(ctx, "$" + fmt(coins), 13, PANEL_Y + 2, [255, 230, 120], [30, 20, 20]);
   text(ctx, "D" + day + " " + clockStr(), 84, PANEL_Y + 2, [220, 210, 190]);
-  text(ctx, "MUS", 169, PANEL_Y + 2, musicOn ? [140, 220, 140] : [140, 120, 110], 5);
-  text(ctx, "SND", 213, PANEL_Y + 2, soundOn ? [140, 220, 140] : [140, 120, 110], 5);
+  text(ctx, "MUS", 169, PANEL_Y + 2, musicOn ? [140, 220, 140] : [150, 132, 122]);
+  text(ctx, "SND", 213, PANEL_Y + 2, soundOn ? [140, 220, 140] : [150, 132, 122]);
   // tabs
   for (const [i, t] of [["crew", 0], ["shop", 1]].map((v, i) => [i, v[0]])) {
     const x = 4 + i * 34, active = tab === t;
     rect(ctx, x, 187, 32, 10, active ? [190, 140, 80] : [90, 70, 60]);
-    text(ctx, t.toUpperCase(), x + 4, 189, active ? [40, 24, 16] : [160, 140, 130], 5);
+    text(ctx, t.toUpperCase(), x + 5, 189, active ? [40, 24, 16] : [175, 155, 145]);
   }
   const rate = incomeRate();
-  text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [170, 150, 135], 5);
+  text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [200, 182, 165]);
   {
     const conf = newConfirmT > 0;
     rect(ctx, 128, 187, 30, 10, conf ? [140, 40, 40] : [90, 70, 60]);
-    text(ctx, conf ? "SURE?" : "NEW", 128 + (conf ? 3 : 7), 189, conf ? [255, 200, 200] : [160, 140, 130], 5);
+    text(ctx, conf ? "SURE?" : "NEW", 128 + (conf ? 1 : 7), 189, conf ? [255, 200, 200] : [175, 155, 145]);
   }
   const due = nightlyDue();
   const rTxt = "DUE 20:00 $" + fmt(due);
   const crunch = coins < due && tmin > 17 * 60 && tmin < 20 * 60;
   const rCol = crunch && ((time * 2) | 0) % 2 ? [255, 60, 60] : coins < due ? [255, 120, 120] : [170, 150, 135];
-  text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, rCol, 4);
+  text(ctx, rTxt, 252 - textWidth(rTxt), 189, rCol);
 
   if (tab === "shop") {
     for (const b of BUTTONS) {
@@ -985,8 +985,8 @@ function drawPanel() {
       rect(ctx, b.x + 1, b.y + 1, b.w - 2, b.h - 2, afford ? [190, 140, 80] : [96, 78, 68]);
       const nameCol = afford ? [40, 24, 16] : [160, 145, 135];
       const lvl = b.key === "chef" ? String(u.lvl) : (u.lvl > 0 ? String(u.lvl) : "");
-      text(ctx, u.name + (lvl ? " " + lvl : ""), b.x + 3, b.y + 2, nameCol, 5);
-      text(ctx, maxed ? "MAX" : "$" + fmt(cost), b.x + 3, b.y + 10, maxed ? [160, 145, 135] : afford ? [80, 45, 20] : [140, 125, 115], 5);
+      text(ctx, u.name + (lvl ? " " + lvl : ""), b.x + 3, b.y + 2, nameCol);
+      text(ctx, maxed ? "MAX" : "$" + fmt(cost), b.x + 3, b.y + 10, maxed ? [175, 158, 148] : afford ? [80, 45, 20] : [150, 135, 125]);
     }
   } else {
     for (let i = 0; i < crabs.length; i++) {
@@ -998,7 +998,7 @@ function drawPanel() {
       const acc = ACCESSORIES[c.duty ? "toque" : c.p.acc];
       if (acc) blit(ctx, acc.art, bx + 4 + acc.dx, 206 + acc.dy);
       rect(ctx, bx + 18, 201, 4, 4, c.duty ? [96, 232, 120] : [150, 140, 140]);
-      text(ctx, c.p.name.slice(0, 5), bx + 1, 224, [220, 210, 190], 5);
+      smallText(ctx, c.p.name.slice(0, 6), bx + 1, 225, [230, 220, 200]);
     }
     if (!crabs.length) text(ctx, "NO CREW YET", 8, 206, [190, 170, 150]);
   }
@@ -1022,18 +1022,18 @@ function drawIntro() {
   // Mr. Pincherton, in the flesh
   blit(ctx, LANDLORD_ART.a, cx2 + 8, 42);
   blit(ctx, ACCESSORIES.shades.art, cx2 + 8 + 1, 42 + 1);
-  text(ctx, "MR. PINCHERTON'S TERMS:", cx2 + 30, 44, [90, 60, 40], 5);
+  text(ctx, "MR. PINCHERTON'S TERMS:", cx2 + 30, 44, [90, 60, 40]);
   const terms = [
     ["THE SHACK IS YOURS TO RUN", [70, 70, 90]],
     ["RENT: $120, NIGHTLY AT 20:00", [170, 50, 50]],
     ["YOUR FIRST NIGHT IS FREE", [40, 130, 60]],
     ["CREW WAGES: $18 EACH, NIGHTLY", [70, 70, 90]],
     ["CREW PAY THEIR OWN HOME RENT", [70, 70, 90]],
-    ["MISS MY RENT AND I TAKE THE SHACK", [170, 50, 50]],
+    ["MISS RENT AND I TAKE THE SHACK", [170, 50, 50]],
   ];
   for (let i = 0; i < terms.length; i++)
-    text(ctx, "- " + terms[i][0], cx2 + 8, 62 + i * 12, terms[i][1], 5);
-  text(ctx, "GOOD LUCK. I'LL COME COLLECT.", cx2 + 8, 62 + terms.length * 12 + 4, [110, 90, 80], 4);
+    text(ctx, "- " + terms[i][0], cx2 + 6, 62 + i * 12, terms[i][1]);
+  text(ctx, "GOOD LUCK. I'LL COME COLLECT.", cx2 + 6, 62 + terms.length * 12 + 4, [110, 90, 80]);
   const bx = W / 2 - 56;
   rect(ctx, bx, 152, 112, 18, [30, 20, 36]);
   rect(ctx, bx + 1, 153, 110, 16, [190, 140, 80]);
@@ -1053,7 +1053,7 @@ function drawTitle() {
   blit(ctx, ACCESSORIES.toque.art, W / 2 - 60 + 4, 54);
   blit(ctx, CRAB_ARTS[1].a, W / 2 + 44, 58, true);
   blit(ctx, ACCESSORIES.flower.art, W / 2 + 44, 55);
-  text(ctx, "A TINY IDLE BEACH TOWN", W / 2 - 55, 76, [110, 90, 80], 5);
+  text(ctx, "A TINY IDLE BEACH TOWN", W / 2 - 65, 76, [110, 90, 80]);
   // menu
   const bx = W / 2 - 50;
   if (hasSave) {
@@ -1067,8 +1067,8 @@ function drawTitle() {
   rect(ctx, bx + 1, ny + 1, 98, 14, conf ? [150, 60, 60] : [120, 100, 80]);
   text(ctx, conf ? "WIPE SAVE?" : "NEW GAME", bx + (conf ? 21 : 26), ny + 5, conf ? [255, 220, 220] : [235, 225, 210]);
   if (((time * 1.5) | 0) % 2) text(ctx, "CLICK TO PLAY", W / 2 - 38, 162, [255, 250, 235], 6);
-  text(ctx, "MUSIC: PIXEL WAVE WALTZ - MATT CLANKER", 14, PANEL_Y + 8, [170, 150, 135], 5);
-  text(ctx, "BUILT ON THE SNESCAT TOY PPU", 44, PANEL_Y + 20, [140, 120, 105], 5);
+  text(ctx, "MUSIC: PIXEL WAVE WALTZ - MATT CLANKER", 14, PANEL_Y + 8, [200, 182, 165]);
+  text(ctx, "BUILT ON THE SNESCAT TOY PPU", 44, PANEL_Y + 20, [165, 145, 128]);
 }
 function drawGameOver() {
   ctx.fillStyle = "rgba(16,12,30,0.72)";
@@ -1080,7 +1080,7 @@ function drawGameOver() {
   text(ctx, "THE LANDLORD CRAB TOOK", cx2 - 66, 92, [90, 60, 50], 6);
   text(ctx, "BACK THE SHACK", cx2 - 41, 101, [90, 60, 50], 6);
   text(ctx, "NIGHTLY RENT OWED $" + fmt(rentAmount()), cx2 - 66, 114, [140, 60, 60], 6);
-  text(ctx, "SURVIVED " + day + " DAYS  EARNED $" + fmt(lifetime), cx2 - 78, 124, [90, 90, 110], 5);
+  text(ctx, "SURVIVED " + day + " DAYS, EARNED $" + fmt(lifetime), cx2 - 82, 124, [90, 90, 110]);
   const bl = ((time * 2) | 0) % 2;
   if (bl) text(ctx, "CLICK TO START OVER", cx2 - 56, 137, [40, 110, 60], 6);
 }

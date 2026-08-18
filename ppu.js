@@ -92,3 +92,28 @@ function textShadow(ctx, s, x, y, color, shadow, spacing = 6) {
 }
 
 function textWidth(s, spacing = 6) { return String(s).length * spacing - 1; }
+
+// ---- 3x5 micro font ----
+const _sGlyphCache = {};
+function sGlyph(ch, color) {
+  const key = ch + "#" + color.join(",");
+  let g = _sGlyphCache[key];
+  if (g) return g;
+  const rows = FONT_SMALL[ch] || FONT_SMALL["?"];
+  const cv = document.createElement("canvas");
+  cv.width = 3; cv.height = 5;
+  const cx = cv.getContext("2d");
+  cx.fillStyle = rgb(color);
+  for (let y = 0; y < 5; y++)
+    for (let x = 0; x < 3; x++)
+      if (rows[y][x] === "1") cx.fillRect(x, y, 1, 1);
+  g = _sGlyphCache[key] = cv;
+  return g;
+}
+function smallText(ctx, s, x, y, color) {
+  s = String(s).toUpperCase();
+  for (let i = 0; i < s.length; i++)
+    if (s[i] !== " ") ctx.drawImage(sGlyph(s[i], color), (x + i * 4) | 0, y | 0);
+  return x + s.length * 4;
+}
+function smallTextWidth(s) { return String(s).length * 4 - 1; }
