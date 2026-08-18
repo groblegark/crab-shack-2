@@ -27,6 +27,9 @@ loop; at close they head home under the string lights and sleep.
   they lose the house and move into the town SHELTER (rent-free), keep
   working, and move back once they've saved the $25 deposit. You open
   with $140.
+- **Menu tab**: prices at a glance — each dish's sell price and
+  ingredient cost, plus tonight's itemized bill (shack rent + wages).
+  Clicking the BILL TONIGHT readout jumps straight there.
 - **Idle economy**: same coins/tips as CS1; SHOP tab has HIRE CRAB (each
   hire is a new random personality who moves into the next house),
   SHOES, KNIFE, FLAME, EXPAND, ADS. Saves to localStorage with offline

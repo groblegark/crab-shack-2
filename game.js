@@ -370,7 +370,7 @@ function release(c) {
   c.slot = -1; c.slotKind = null;
 }
 function abortChef(c) {
-  if (c.kstate === "work") release(c);
+  release(c);   // frees a held slot in toSlot/work; no-op otherwise
   c.kstate = "idle"; c.cust = null; c.carrying = null; c.stepIdx = 0;
 }
 function updateKitchen(c, dt) {
@@ -403,6 +403,15 @@ function updateKitchen(c, dt) {
     const kind = c.cust.recipe.steps[c.stepIdx][0];
     const s = tryAcquire(kind);
     if (s >= 0) { c.slotKind = kind; c.slot = s; c.target = stationSlotX(kind, s); c.kstate = "toSlot"; }
+    else {
+      // stand aside in a little queue instead of on top of the working crab
+      let qn = 0;
+      for (const o of crabs) {
+        if (o === c) break;
+        if (o.kstate === "waitSlot" && o.cust && o.cust.recipe.steps[o.stepIdx][0] === kind) qn++;
+      }
+      stepTo(c, STX[kind][0] - 12 - qn * 11, spd, dt);
+    }
   } else if (c.kstate === "toSlot") {
     if (stepTo(c, c.target, spd, dt)) {
       const [, secs] = c.cust.recipe.steps[c.stepIdx];
@@ -543,7 +552,7 @@ addEventListener("mousemove", (ev) => {
   if (Math.abs(p.x - dragStartX) > 4) { dragMoved = true; followIdx = -1; }
   if (dragMoved) camX = clampCam(dragCamX - (p.x - dragStartX));
 });
-addEventListener("mouseup", () => { dragging = false; });
+addEventListener("mouseup", () => { dragging = false; setTimeout(() => { dragMoved = false; }, 50); });
 cv.addEventListener("touchstart", (ev) => {
   const t = ev.touches[0];
   const p = evPos(t);
@@ -596,11 +605,13 @@ cv.addEventListener("click", (ev) => {
     if (p.y >= 187 && p.y < 197) {
       if (p.x >= 4 && p.x < 36) { tab = "crew"; return; }
       if (p.x >= 38 && p.x < 70) { tab = "shop"; return; }
-      if (p.x >= 128 && p.x < 158) {
+      if (p.x >= 72 && p.x < 104) { tab = "menu"; return; }
+      if (p.x >= 108 && p.x < 138) {
         if (newConfirmT > 0) newGame();
         else { newConfirmT = 3; sfx.buy(); }
         return;
       }
+      if (p.x >= 150) { tab = "menu"; return; }   // the bill readout opens the menu
     }
     if (tab === "shop") {
       for (const b of BUTTONS)
@@ -954,24 +965,23 @@ function drawPanel() {
   rect(ctx, 0, PANEL_Y, W, 1, [120, 90, 70]);
   blit(ctx, COIN, 4, PANEL_Y + 2);
   textShadow(ctx, "$" + fmt(coins), 13, PANEL_Y + 2, [255, 230, 120], [30, 20, 20]);
-  text(ctx, "D" + day + " " + clockStr(), 84, PANEL_Y + 2, [220, 210, 190]);
+  text(ctx, "D" + day + " " + clockStr(), 66, PANEL_Y + 2, [220, 210, 190]);
+  text(ctx, "$" + incomeRate().toFixed(1) + "/S", 122, PANEL_Y + 2, [200, 182, 165]);
   text(ctx, "MUS", 169, PANEL_Y + 2, musicOn ? [140, 220, 140] : [150, 132, 122]);
   text(ctx, "SND", 213, PANEL_Y + 2, soundOn ? [140, 220, 140] : [150, 132, 122]);
   // tabs
-  for (const [i, t] of [["crew", 0], ["shop", 1]].map((v, i) => [i, v[0]])) {
-    const x = 4 + i * 34, active = tab === t;
+  for (const t of ["crew", "shop", "menu"]) {
+    const x = 4 + ["crew", "shop", "menu"].indexOf(t) * 34, active = tab === t;
     rect(ctx, x, 187, 32, 10, active ? [190, 140, 80] : [90, 70, 60]);
     text(ctx, t.toUpperCase(), x + 5, 189, active ? [40, 24, 16] : [175, 155, 145]);
   }
-  const rate = incomeRate();
-  text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [200, 182, 165]);
   {
     const conf = newConfirmT > 0;
-    rect(ctx, 128, 187, 30, 10, conf ? [140, 40, 40] : [90, 70, 60]);
-    text(ctx, conf ? "SURE?" : "NEW", 128 + (conf ? 1 : 7), 189, conf ? [255, 200, 200] : [175, 155, 145]);
+    rect(ctx, 108, 187, 30, 10, conf ? [140, 40, 40] : [90, 70, 60]);
+    text(ctx, conf ? "SURE?" : "NEW", 108 + (conf ? 1 : 7), 189, conf ? [255, 200, 200] : [175, 155, 145]);
   }
   const due = nightlyDue();
-  const rTxt = "DUE 20:00 $" + fmt(due);
+  const rTxt = "BILL TONIGHT $" + fmt(due);
   const crunch = coins < due && tmin > 17 * 60 && tmin < 20 * 60;
   const rCol = crunch && ((time * 2) | 0) % 2 ? [255, 60, 60] : coins < due ? [255, 120, 120] : [170, 150, 135];
   text(ctx, rTxt, 252 - textWidth(rTxt), 189, rCol);
@@ -987,6 +997,29 @@ function drawPanel() {
       const lvl = b.key === "chef" ? String(u.lvl) : (u.lvl > 0 ? String(u.lvl) : "");
       text(ctx, u.name + (lvl ? " " + lvl : ""), b.x + 3, b.y + 2, nameCol);
       text(ctx, maxed ? "MAX" : "$" + fmt(cost), b.x + 3, b.y + 10, maxed ? [175, 158, 148] : afford ? [80, 45, 20] : [150, 135, 125]);
+    }
+  } else if (tab === "menu") {
+    for (let i = 0; i < RECIPES.length; i++) {
+      const r = RECIPES[i], y = 200 + i * 11;
+      blit(ctx, ITEMS[r.icon], 4, y);
+      text(ctx, ITEM_NAMES[r.icon], 16, y, [230, 220, 200]);
+      const sTxt = "$" + r.pay;
+      text(ctx, sTxt, 100 - textWidth(sTxt), y, [255, 230, 120]);
+      smallText(ctx, ITEM_NAMES[r.raw] + " $" + INGREDIENT_COST[r.raw], 106, y + 1, [175, 155, 145]);
+    }
+    smallText(ctx, "+ TIPS FOR QUICK SERVICE", 4, 233, [150, 135, 125]);
+    rect(ctx, 146, 199, 1, 38, [90, 70, 60]);
+    text(ctx, "NIGHTLY BILL", 152, 199, [230, 220, 200]);
+    const rent = rentAmount();
+    const bills = [
+      ["SHACK RENT", rent === 0 ? "FREE!" : "$" + rent],
+      ["WAGES " + crabs.length + " X $" + CRAB_WAGE, "$" + CRAB_WAGE * crabs.length],
+      ["TOTAL AT 20:00", "$" + fmt(nightlyDue())],
+    ];
+    for (let i = 0; i < bills.length; i++) {
+      const y = 210 + i * 8, col = i === 2 ? [255, 230, 120] : [200, 182, 165];
+      smallText(ctx, bills[i][0], 152, y, col);
+      smallText(ctx, bills[i][1], 252 - smallTextWidth(bills[i][1]), y, col);
     }
   } else {
     for (let i = 0; i < crabs.length; i++) {
