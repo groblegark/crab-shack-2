@@ -31,6 +31,15 @@ loop; at close they head home under the string lights and sleep.
   SHOES, KNIFE, FLAME, EXPAND, ADS. Saves to localStorage with offline
   earnings.
 
+**You lose by default, but just barely.** Tuned via the headless
+simulator (`node tools/headless.mjs --days 30 --seeds 8 [--buy chef,ads,knife,flame]`),
+which runs the real game code against stubbed browser APIs at ~1000x:
+an untouched shack gets evicted around day 11-14; sharpening knives
+only delays it (median day 18); actually growing — hiring crabs and
+running ads — survives indefinitely (7/8 seeds at 40 days). First night
+is rent-free, and the founding duo PINCHY & CLAWDIA are always the same
+so every opening is fair; hires are the gacha.
+
 Music: "Pixel Wave Waltz" by Matt Clanker, made with Suno.
 Static page, no build step — GitHub Pages from main/root. `?fresh` for a
 throwaway session. M/N toggle sfx/music.

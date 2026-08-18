@@ -67,8 +67,17 @@ const ACC_KEYS = ["cap", "bow", "shades", "flower", "none"];
 const TRAIT_KEYS = Object.keys(TRAITS);
 const MODE_KEYS = Object.keys(MODES);
 
+// the two founders are always the same, so every new game opens fair;
+// hires are the gacha
+const FOUNDERS = [
+  { name: "PINCHY", trait: "speedy", mode: "walk", acc: "none" },
+  { name: "CLAWDIA", trait: "tidy", mode: "bike", acc: "flower" },
+];
 function makeCrabPersona(i, rng) {
   rng = rng || Math.random;
+  if (FOUNDERS[i]) return Object.assign({
+    color: i, shift: i % 2 === 0 ? "M" : "E", house: i, wallet: 10,
+  }, FOUNDERS[i]);
   return {
     name: CRAB_NAMES[i % CRAB_NAMES.length],
     trait: TRAIT_KEYS[(rng() * TRAIT_KEYS.length) | 0],

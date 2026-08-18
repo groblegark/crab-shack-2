@@ -40,7 +40,7 @@ function darkness() { // 0 = day, 1 = full night
 }
 
 // ---------------------------------------------------------------- recipes
-const INGREDIENT_COST = { fish_raw: 4, fruit: 2 };
+const INGREDIENT_COST = { fish_raw: 5, fruit: 3 };
 const ITEM_NAMES = {
   fish_raw: "FISH", fish_cut: "CUT FISH", fruit: "FRUIT",
   taco: "FISH TACO", juice: "JUICE", plate_fish: "GRILL FISH",
@@ -76,9 +76,11 @@ let coins = 0, lifetime = 0, time = 0;
 let crabs = [], customers = [], floaters = [];
 let spawnT = 3, toast = null, soundOn = true;
 let camX = 300, followIdx = -1, tab = "crew";
-let lastRentDay = 0, gameOver = false;
-const CRAB_WAGE = 15, HOUSE_RENT = 8;
-function rentAmount() { return Math.round(40 * Math.pow(1.04, day - 1)); }
+let lastRentDay = 0, gameOver = false, newConfirmT = 0;
+let screen = "title", hasSave = false, wiping = false;
+function newGame() { wiping = true; localStorage.removeItem(SAVE_KEY); location.reload(); }
+const CRAB_WAGE = 18, HOUSE_RENT = 8;
+function rentAmount() { return day <= 1 ? 0 : 100 + 3 * (day - 2); }
 function nightlyDue() { return rentAmount() + CRAB_WAGE * crabs.length; }
 const busy = { board: [false, false, false], grill: [false, false, false] };
 const bus = { x: 360, dir: 1, state: "drive", dwellT: 0, riders: [] };
@@ -187,8 +189,9 @@ function incomeRate() {
 // ---------------------------------------------------------------- save
 const SAVE_KEY = "crabshack2_v1";
 const FRESH = location.search.includes("fresh");
+const TURBO = Math.max(1, parseInt((location.search.match(/turbo=(\d+)/) || [0, 1])[1]) || 1);
 function save() {
-  if (FRESH) return;
+  if (FRESH || wiping) return;
   const lv = {}; for (const k in UPS) lv[k] = UPS[k].lvl;
   localStorage.setItem(SAVE_KEY, JSON.stringify({
     coins, lifetime, lv, day, tmin, lastRentDay, rate: incomeRate(), t: Date.now(),
@@ -521,7 +524,21 @@ function evPos(ev) {
 function clampCam(x) { return Math.max(0, Math.min(WORLD_W - W, x)); }
 
 cv.addEventListener("click", (ev) => {
-  if (gameOver) { localStorage.removeItem(SAVE_KEY); location.reload(); return; }
+  if (screen === "title") {
+    const p = evPos(ev);
+    const bx = W / 2 - 50;
+    if (p.x >= bx && p.x < bx + 100) {
+      if (hasSave && p.y >= 118 && p.y < 134) { screen = "play"; startMusic(); sfx.ding(); return; }
+      const ny = hasSave ? 138 : 122;
+      if (p.y >= ny && p.y < ny + 16) {
+        if (!hasSave || newConfirmT > 0) { hasSave ? newGame() : (screen = "play", startMusic(), sfx.ding()); }
+        else { newConfirmT = 3; sfx.buy(); }
+        return;
+      }
+    }
+    return;
+  }
+  if (gameOver) { newGame(); return; }
   startMusic();
   const p = evPos(ev);
   if (dragMoved) return;
@@ -532,6 +549,11 @@ cv.addEventListener("click", (ev) => {
     if (p.y >= 187 && p.y < 197) {
       if (p.x >= 4 && p.x < 36) { tab = "crew"; return; }
       if (p.x >= 38 && p.x < 70) { tab = "shop"; return; }
+      if (p.x >= 128 && p.x < 158) {
+        if (newConfirmT > 0) newGame();
+        else { newConfirmT = 3; sfx.buy(); }
+        return;
+      }
     }
     if (tab === "shop") {
       for (const b of BUTTONS)
@@ -564,6 +586,21 @@ addEventListener("keydown", (e) => {
 });
 
 // ---------------------------------------------------------------- drawing
+const _bigCache = {};
+function bigText(c2, s, x, y, color, scale, shadow) {
+  const key = s + "#" + color.join() + "#" + scale;
+  let cv2 = _bigCache[key];
+  if (!cv2) {
+    cv2 = document.createElement("canvas");
+    cv2.width = textWidth(s) + 2; cv2.height = 9;
+    const cx3 = cv2.getContext("2d");
+    if (shadow) text(cx3, s, 1, 1, shadow);
+    text(cx3, s, 0, 0, color);
+    _bigCache[key] = cv2;
+  }
+  c2.imageSmoothingEnabled = false;
+  c2.drawImage(cv2, x | 0, y | 0, cv2.width * scale, cv2.height * scale);
+}
 const SKY = [[110, 190, 255], [130, 200, 255], [160, 215, 255], [190, 230, 255]];
 const STARS = [];
 for (let i = 0; i < 40; i++) STARS.push([(i * 61 + 17) % 256, (i * 37 + 5) % 52]);
@@ -784,6 +821,11 @@ function drawPanel() {
   }
   const rate = incomeRate();
   text(ctx, "$" + rate.toFixed(1) + "/S", 84, 189, [170, 150, 135], 5);
+  {
+    const conf = newConfirmT > 0;
+    rect(ctx, 128, 187, 30, 10, conf ? [140, 40, 40] : [90, 70, 60]);
+    text(ctx, conf ? "SURE?" : "NEW", 128 + (conf ? 3 : 7), 189, conf ? [255, 200, 200] : [160, 140, 130], 5);
+  }
   const due = nightlyDue();
   const rTxt = "DUE 20:00 $" + fmt(due);
   text(ctx, rTxt, 252 - textWidth(rTxt, 4), 189, coins < due ? [255, 120, 120] : [170, 150, 135], 4);
@@ -824,6 +866,37 @@ function drawFloaters(dt) {
   }
   floaters = floaters.filter(f => f.t > 0);
 }
+function drawTitle() {
+  ctx.fillStyle = "rgba(16,20,50,0.35)";
+  ctx.fillRect(0, 0, W, H);
+  rect(ctx, 0, PANEL_Y, W, H - PANEL_Y, [58, 42, 38]);
+  // logo card
+  const lw = 168;
+  rect(ctx, W / 2 - lw / 2 - 2, 26, lw + 4, 62, [30, 20, 36]);
+  rect(ctx, W / 2 - lw / 2, 28, lw, 58, [255, 250, 235]);
+  bigText(ctx, "CRAB SHACK", W / 2 - textWidth("CRAB SHACK"), 34, [230, 72, 88], 2, [120, 30, 40]);
+  bigText(ctx, "2", W / 2 - 9, 54, [40, 140, 220], 3, [20, 70, 120]);
+  blit(ctx, CRAB_ARTS[0].a, W / 2 - 60, 58);
+  blit(ctx, ACCESSORIES.toque.art, W / 2 - 60 + 4, 54);
+  blit(ctx, CRAB_ARTS[1].a, W / 2 + 44, 58, true);
+  blit(ctx, ACCESSORIES.flower.art, W / 2 + 44, 55);
+  text(ctx, "A TINY IDLE BEACH TOWN", W / 2 - 55, 76, [110, 90, 80], 5);
+  // menu
+  const bx = W / 2 - 50;
+  if (hasSave) {
+    rect(ctx, bx, 118, 100, 16, [30, 20, 36]);
+    rect(ctx, bx + 1, 119, 98, 14, [190, 140, 80]);
+    text(ctx, "CONTINUE", bx + 27, 123, [40, 24, 16]);
+  }
+  const ny = hasSave ? 138 : 122;
+  const conf = newConfirmT > 0;
+  rect(ctx, bx, ny, 100, 16, [30, 20, 36]);
+  rect(ctx, bx + 1, ny + 1, 98, 14, conf ? [150, 60, 60] : [120, 100, 80]);
+  text(ctx, conf ? "WIPE SAVE?" : "NEW GAME", bx + (conf ? 21 : 26), ny + 5, conf ? [255, 220, 220] : [235, 225, 210]);
+  if (((time * 1.5) | 0) % 2) text(ctx, "CLICK TO PLAY", W / 2 - 38, 162, [255, 250, 235], 6);
+  text(ctx, "MUSIC: PIXEL WAVE WALTZ - MATT CLANKER", 14, PANEL_Y + 8, [170, 150, 135], 5);
+  text(ctx, "BUILT ON THE SNESCAT TOY PPU", 44, PANEL_Y + 20, [140, 120, 105], 5);
+}
 function drawGameOver() {
   ctx.fillStyle = "rgba(16,12,30,0.72)";
   ctx.fillRect(0, 0, W, H);
@@ -850,12 +923,13 @@ function drawToast() {
 // ---------------------------------------------------------------- main loop
 let last = performance.now(), saveT = 0;
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  const dt = Math.min(0.1, (now - last) / 1000) * TURBO;
   last = now; time += dt;
   if (!gameOver) tmin += dt * TS;
   if (tmin >= 1440) { tmin -= 1440; day++; }
   if (tmin >= 20 * 60 && lastRentDay !== day) {
     lastRentDay = day;
+    (window.dayLog = window.dayLog || []).push({ day, close: Math.round(coins) });
     // 1. wages: pay every crab you can afford
     let wages = 0;
     for (const c of crabs) {
@@ -894,7 +968,9 @@ function frame(now) {
     if (coins >= rent) {
       coins -= rent;
       earnHist.push({ t: time, amt: -rent });
-      if (!evictedNames.length && !toast) toast = { text: "PAID $" + fmt(wages) + " WAGES + $" + fmt(rent) + " RENT", t: 5 };
+      if (!evictedNames.length && !toast) toast = { text: rent === 0
+        ? "FIRST NIGHT FREE - WELCOME TO THE BOARDWALK!"
+        : "PAID $" + fmt(wages) + " WAGES + $" + fmt(rent) + " RENT", t: 5 };
       popText("-$" + rent + " RENT", SHACK_DOOR, 110, [255, 120, 120]);
       sfx.buy(); save();
     } else {
@@ -904,6 +980,19 @@ function frame(now) {
     }
   }
 
+  if (screen === "title") {
+    // attract mode: slow ping-pong pan across the town
+    const span = WORLD_W - W, s = (time * 9) % (2 * span);
+    camX = s < span ? s : 2 * span - s;
+    updateBus(dt);
+    for (const c of crabs) { c.animT += dt; maybeQuip(c, dt); }
+    drawBG(); drawTown(); drawBus();
+    for (const c of crabs) drawCrab(c);
+    drawNight();
+    drawTitle();
+    requestAnimationFrame(frame);
+    return;
+  }
   if (!gameOver) {
   updateBus(dt);
   updateCustomers(dt);
@@ -918,6 +1007,7 @@ function frame(now) {
     const t = clampCam(crabs[followIdx].x - W / 2 + 8);
     camX += (t - camX) * Math.min(1, dt * 5);
   }
+  if (newConfirmT > 0) newConfirmT -= dt;
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
   saveT += dt; if (saveT > 5) { saveT = 0; save(); }
   }
@@ -939,9 +1029,10 @@ function frame(now) {
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); else last = performance.now(); });
 addEventListener("beforeunload", save);
 
-if (!load()) {
+hasSave = load();
+if (!hasSave) {
   crabs = [newCrab(makeCrabPersona(0)), newCrab(makeCrabPersona(1))];
-  coins = 100;   // opening cash: ingredients + first rent buffer
+  coins = 140;   // opening cash: ingredients + first rent buffer
 }
 requestAnimationFrame(frame);
 
